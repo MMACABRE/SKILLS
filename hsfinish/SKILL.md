@@ -13,7 +13,7 @@ Bring the project's planning/memory markdown up to date with real progress, and 
 2. **Sync check (git repos with a GitHub remote).** Do this before reading progress so the docs describe the real, current state:
    - `git fetch --prune` (read-only), then compare `HEAD` with its upstream: `git status -sb`, `git rev-list --left-right --count HEAD...@{u}`. Also check `git branch -vv` for other local branches that are ahead/behind or have no upstream.
    - Behind and working tree clean → `git pull --ff-only`. Behind with local changes, diverged, or ff not possible → do not merge/rebase/stash on your own; report it and continue with the local state.
-   - Ahead (unpushed commits) or uncommitted/untracked files → list them. Never push or commit unasked; offer to, once, at the end.
+   - Ahead (unpushed commits) or uncommitted/untracked files → list them. They are published in step 8, with no confirmation.
    - Local files vs repo: flag tracked files deleted/renamed locally, and doc claims that disagree with the code (a path, command or script that no longer exists). Fix the doc, not the code.
    - No remote, no upstream, or `gh`/network unavailable → say sync was skipped and why; carry on.
 3. **Back up.** In a git repo, git is the backup; check `git status` and note files with uncommitted edits (warn, still proceed). Outside git, copy originals to `.hsfinish-backup/<timestamp>/`.
@@ -26,7 +26,12 @@ Bring the project's planning/memory markdown up to date with real progress, and 
    - CLAUDE.md/AGENTS.md: refresh commands, structure, conventions that changed. Move one-off progress notes out to plan/status files.
    - Notes: merge duplicates, drop resolved items.
 6. **Compress.** Cut filler, repeated explanations, and history that git already holds. Use terse fragments. Keep verbatim: code blocks, commands, file paths, URLs, env var names, headings, tables that carry data. Keep anything not derivable from code or git: decisions and their why, gotchas, constraints, credentials-handling rules, user preferences. When unsure if a line is still true or needed, keep it and mark `(verify)` rather than delete.
-7. **Report.** Sync state (ahead/behind, pulled or not, uncommitted files), then per file: lines/bytes before and after, what was marked done, what was removed, what was marked `(verify)`. Do not commit or push; offer once.
+7. **Publish (no confirmation).** In a git repo with an `origin` remote, always do this at the end of every run, without asking. The user has pre-approved it for `/hsfinish`.
+   - Commit: stage everything not git-ignored (the updated docs plus any other pending work) and commit with a Conventional Commits message. Never stage `.env`, keys, patient data or anything git-ignored; if a secret-looking file is untracked and not ignored, leave it out and report it.
+   - Merge to `main`: if the current branch is not `main`, merge it into `main` (`git merge --ff-only`; if that is impossible, `git merge --no-edit`). On any conflict, run `git merge --abort`, report it, and stop this step. Never resolve conflicts by discarding either side.
+   - Push: `git push origin main`, and also push the working branch if it is not `main`. Never force-push. `origin` is the private repo. Never push to any other remote, and never export or push to a public repo (for example `MMACABRE/DeployPatientManager`); that stays the user's call.
+   - Push fails (auth, network, rejected non-fast-forward) → report the exact error and stop; do not work around it.
+8. **Report.** Sync state (ahead/behind, pulled or not), then per file: lines/bytes before and after, what was marked done, what was removed, what was marked `(verify)`. Then the commit hash, the merge result, and the push result.
 
 ## Rules
 
