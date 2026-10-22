@@ -2,7 +2,8 @@
 name: hsluck
 description: >
   Skill bundle loader. Loads the user's standard set of skills (caveman, ponytail,
-  graphify, review, TDD, debugging, git, design, etc.) into context in one call.
+  grilling, ce-* review/debug, commits, PRs, etc.) into context in one call.
+  Complements hs24skills (no overlap).
   Use for /hsluck or "load my skills".
 disable-model-invocation: false
 ---
@@ -17,9 +18,11 @@ When this skill is invoked, load every skill below into context **right now**, b
    - Independent calls: send them in parallel (several `Skill` calls in one message) to save time.
    - If a skill is not found or fails to load, note its name and keep going. Do not stop the batch.
 2. After all calls finish, print one short report:
-   - `loaded: N/28`
+   - `loaded: N/16`
    - `missing: <names>` (only if any failed)
 3. From then on, follow every loaded skill's instructions for the rest of the session, whenever a task falls in that skill's scope. `caveman` stays active for chat output; code, docs and commits stay in normal prose.
+   - `unslop` and `caveman` work together. In chat, apply both: unslop's word and style rules (plain words, no filler, no chatbot phrases, no em dashes) plus caveman's shortening. Where they clash (unslop rule 33, over-compression), caveman wins in chat.
+   - In anything written to a file or sent out (docs, code comments, commit messages, PR bodies), caveman is off and unslop applies in full, rule 33 included.
 4. If the user passed args with `/hsluck <args>`, treat them as the task to start once loading is done.
 
 ## Rule: decide first, delegate second (who does what)
@@ -103,50 +106,47 @@ This rule stays active for the whole session once hsluck is loaded, for the main
 - **New skill:** write it in `~/.agents/skills/<name>/SKILL.md`, then add a link in `~/.claude/skills/` so Claude Code finds it. Use a directory junction, like the existing ones (a Windows `.lnk` shortcut is not followed): PowerShell `New-Item -ItemType Junction -Path "$env:USERPROFILE\.claude\skills\<name>" -Target "$env:USERPROFILE\.agents\skills\<name>"`.
 - Applies to any agent told to create, change, rename, or delete a skill.
 
+## Rule: keep the GitHub skills repo in sync
+
+The user keeps a copy of their skills at https://github.com/MMACABRE/SKILLS. It should match the local skills in `~/.agents/skills/` (Windows: `C:\Users\H.2\.agents\skills\`).
+
+- **When to ask:** after any skill in `~/.agents/skills/` is created, changed, renamed, or deleted in this session, ask the user once, at a natural stopping point: "Update the SKILLS repo with your local skills?" Also ask now and then at the end of a longer session if the local skills may have drifted from the repo. Do not ask more than once per session unless skills change again after the user answers.
+- **Never push without a yes.** Pushing is the user's call every time.
+- **Local always wins.** The local skills in `~/.agents/skills/` are the source of truth. Write them over the repo's copies; never pull repo changes back into the local folder. Skills that exist only in the repo: list them and ask the user whether to delete them from the repo.
+- **On yes:** clone or pull the repo into the scratchpad (not inside `~/.agents/skills/`), copy the local skill folders over it, show the user the `git status` and a short diff summary (added, changed, deleted skills), then commit and push only after they confirm. Do not copy secrets, `.env` files, or caches.
+- **On no:** drop it for this session.
+
 ## Skill list
 
 Communication and meta:
 - unslop
 - caveman
 - ponytail
-- graphify
 - find-skills
-- grilling  (engine behind `/grill-me`; grill-me itself is user-only, `disable-model-invocation: true`, so load grilling instead)
-- handoff
+- mattpocock-skills:grilling
+- mattpocock-skills:domain-modeling
+  (these two = `/mattpocock-skills:grill-with-docs`, which is user-only, `disable-model-invocation: true`, and just loads them)
 - research
 
-Design and frontend:
-- api-and-interface-design
-
 Review and simplification:
-- code-review-and-quality
-- code-simplification
 - ce-code-review
 - ce-simplify-code
 - caveman-review
 
 Building:
-- test-driven-development
-- source-driven-development
-- spec-driven-development
-- incremental-implementation
 - safe-refactor
 
 Browser testing:
-- browser-testing-with-devtools
 - ce-test-browser
 
 Debugging and performance:
-- debugging-and-error-recovery
-- performance-optimization
 - ce-debug
 - ce-optimize
 
 Git:
-- git-workflow-and-versioning
 - caveman-commit
 - pr
 
 ## Editing the bundle
 
-To add or remove a skill, edit the list above (and the `N/28` count).
+To add or remove a skill, edit the list above (and the `N/16` count). Skills already in `hs24skills` stay out of this list; load both bundles to get them all.
