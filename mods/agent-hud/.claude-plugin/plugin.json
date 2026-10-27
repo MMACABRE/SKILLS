@@ -1,0 +1,7 @@
+{
+  "name": "agent-hud",
+  "version": "0.3.0",
+  "description": "Hovering HUD showing running agents/subagents (model + state), live session/weekly usage bars with reset times, and a skill finder with favourites",
+  "author": { "name": "Hossein" },
+  "types": "./types/index.d.ts"
+}

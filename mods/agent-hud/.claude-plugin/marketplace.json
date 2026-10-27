@@ -1,0 +1,6 @@
+{
+  "name": "hossein-mods",
+  "owner": { "name": "Hossein" },
+  "description": "Hossein's personal Claude Code mods",
+  "plugins": [{ "name": "agent-hud", "source": "./" }]
+}
