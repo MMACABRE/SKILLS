@@ -51,7 +51,7 @@ Read these references when the step that needs them comes up:
 4. **One agent works at a time.** Do not wake the next agent until the current one has finished its round and written `pipeline.md`. Wait for the completion notice. Do not poll.
 5. **The Coder is the only one who changes project code.** The Tester writes only in `.crew/tests/`. The Reviewer writes nothing outside `pipeline.md` and its handoff file. When someone finds a mistake, the Planner orders the Coder to fix its own work.
 6. **Subagents never share a skill.** No skill appears on two of Coder, Tester and Reviewer. The Planner may hold any skill.
-7. **Subagents run on Haiku 5.5 or Sonnet 5.5, never Opus.** The user picks one model for all three at the start.
+7. **Subagents run on Haiku 5.5 or Sonnet 5.5, never Opus.** The user picks a model for each of the three at the start.
 8. **Ask the user before anything irreversible or outward-facing**: deleting data, `git push`, creating a remote repo, deploying, spending money, sending anything to an outside service. The spec does not grant this permission.
 
 ## Startup
@@ -66,7 +66,7 @@ Do these in order. Each step that asks the user waits for the answer.
    - New remote repository: create it only after the user confirms (rule 8).
    Work inside that repository for the rest of the project.
 3. **Check for the spec.** The spec is the result of the user's own brainstorming (for example with `grilling` or `wayfinder`), from this conversation or from a file the user points to. If there is no finished spec, stop. Tell the user to finish one first, and do not start the loop.
-4. **Ask for the subagent model**: "All Haiku 5.5 or all Sonnet 5.5?" Never offer Opus.
+4. **Ask for each subagent's model**: one question per role (Coder, Tester, Reviewer), each offering Haiku 5.5 and Sonnet 5.5. Mark the recommended option first: Coder → "Haiku 5.5 (Recommended)", Tester → "Sonnet 5.5 (Recommended)", Reviewer → "Sonnet 5.5 (Recommended)". Never offer Opus. Record the choices in `planner-log.md`.
 5. **Set up `.crew/`** at the repository root:
    ```
    .crew/
@@ -79,7 +79,7 @@ Do these in order. Each step that asks the user waits for the answer.
    Add `.crew/` to `.gitignore`. Note in `planner-log.md` the spec's starting state (a copy or its hash) so a later cycle can compare.
 6. **Pick the skills.** Read `references/skills.md`. Look at the project's stack and the spec, then choose the extra skills per agent from the pools. Check rule 6 across all three lists before spawning. Write the final lists, with a one-line reason per extra skill, in `planner-log.md`.
 7. **Spawn the crew.** For each role, call the Agent tool once:
-   - `subagent_type: "general-purpose"`, `model` as the user chose, no `isolation`. All three share the same working tree, because only one works at a time.
+   - `subagent_type: "general-purpose"`, `model` as the user chose for that role, no `isolation`. All three share the same working tree, because only one works at a time.
    - `prompt`: the full text of `references/<role>.md`, then the repository path, then the agent's skill list.
    The brief tells the agent to load its skills, report `loaded: N/N`, write its handoff file, and stop. Record each agent's ID (or name) from the spawn result in `planner-log.md`. Any missing skill triggers rule 1.
 8. **Write the first order** to `pipeline.md` and start the loop.
