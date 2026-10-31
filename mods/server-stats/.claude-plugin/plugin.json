@@ -1,0 +1,7 @@
+{
+  "name": "server-stats",
+  "version": "0.1.0",
+  "description": "A pane showing this server's CPU %, RAM and disk (GB and %), and its IP address",
+  "author": { "name": "Hossein" },
+  "types": "./types/index.d.ts"
+}

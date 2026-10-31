@@ -1,0 +1,6 @@
+{
+  "name": "mmacabre-skills",
+  "owner": { "name": "Hossein" },
+  "description": "Hossein's Claude Code mods, installable from GitHub",
+  "plugins": [{ "name": "server-stats", "source": "./mods/server-stats" }]
+}
