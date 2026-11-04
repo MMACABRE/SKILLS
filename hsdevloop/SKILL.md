@@ -52,7 +52,9 @@ Read these references when the step that needs them comes up:
 5. **The Coder is the only one who changes project code.** The Tester writes only in `.crew/tests/`. The Reviewer writes nothing outside `pipeline.md` and its handoff file. When someone finds a mistake, the Planner orders the Coder to fix its own work.
 6. **Subagents never share a skill.** No skill appears on two of Coder, Tester and Reviewer. The Planner may hold any skill.
 7. **Subagents run on Haiku 5.5 or Sonnet 5.5, never Opus.** The user picks a model for each of the three at the start.
-8. **Ask the user before anything irreversible or outward-facing**: deleting data, `git push`, creating a remote repo, deploying, spending money, sending anything to an outside service. The spec does not grant this permission.
+8. **Subagents are named CODER, TESTER and REVIEWER.** Spawn each with its own agent type of that name, never as `general-purpose`.
+9. **Ask the user before anything irreversible or outward-facing**: deleting data, `git push`, creating a remote repo, deploying, spending money, sending anything to an outside service. The spec does not grant this permission.
+10. **Every round moves the project forward by a real amount.** Each order must deliver at least about 10% of the current cycle's remaining work (see Round size). A round that only fixes findings from the last round is not allowed: fold those fixes into the next order that also builds something new.
 
 ## Startup
 
@@ -63,7 +65,7 @@ Do these in order. Each step that asks the user waits for the answer.
 2. **Ask for the repository. Always, every project.** Ask the user where this project lives: a local folder, a remote URL to clone, or a new repository. Then make it ready:
    - Local folder that is not a git repo: ask before running `git init`.
    - Remote URL: clone it into the folder the user names.
-   - New remote repository: create it only after the user confirms (rule 8).
+   - New remote repository: create it only after the user confirms (rule 9).
    Work inside that repository for the rest of the project.
 3. **Check for the spec.** The spec is the result of the user's own brainstorming (for example with `grilling` or `wayfinder`), from this conversation or from a file the user points to. If there is no finished spec, stop. Tell the user to finish one first, and do not start the loop.
 4. **Ask for each subagent's model**: one question per role (Coder, Tester, Reviewer), each offering Haiku 5.5 and Sonnet 5.5. Mark the recommended option first: Coder → "Haiku 5.5 (Recommended)", Tester → "Sonnet 5.5 (Recommended)", Reviewer → "Sonnet 5.5 (Recommended)". Never offer Opus. Record the choices in `planner-log.md`.
@@ -79,7 +81,9 @@ Do these in order. Each step that asks the user waits for the answer.
    Add `.crew/` to `.gitignore`. Note in `planner-log.md` the spec's starting state (a copy or its hash) so a later cycle can compare.
 6. **Pick the skills.** Read `references/skills.md`. Look at the project's stack and the spec, then choose the extra skills per agent from the pools. Check rule 6 across all three lists before spawning. Write the final lists, with a one-line reason per extra skill, in `planner-log.md`.
 7. **Spawn the crew.** For each role, call the Agent tool once:
-   - `subagent_type: "general-purpose"`, `model` as the user chose for that role, no `isolation`. All three share the same working tree, because only one works at a time.
+   - `subagent_type`: exactly `"CODER"`, `"TESTER"` or `"REVIEWER"`, matching the role. Never `"general-purpose"` or any other type. These agent types are defined in `agents/` and installed to `~/.claude/agents/` by `scripts/bundle.sh install`. If one is missing from the available agent types, run that script and ask the user to restart Claude Code; do not fall back to `general-purpose`.
+   - `description`: the role name in capitals (`CODER`, `TESTER`, `REVIEWER`), so the agent shows under that name.
+   - `model` as the user chose for that role, no `isolation`. All three share the same working tree, because only one works at a time.
    - `prompt`: the full text of `references/<role>.md`, then the repository path, then the agent's skill list.
    The brief tells the agent to load its skills, report `loaded: N/N`, write its handoff file, and stop. Record each agent's ID (or name) from the spawn result in `planner-log.md`. Any missing skill triggers rule 1.
 8. **Write the first order** to `pipeline.md` and start the loop.
@@ -88,7 +92,7 @@ Do these in order. Each step that asks the user waits for the answer.
 
 Each round, send the agent one message with `SendMessage`, addressed to its recorded ID or name: "Your turn, round N. Read `.crew/pipeline.md`." Then wait for its completion notice.
 
-1. **Planner writes the order.** Overwrite `pipeline.md` with the order for this round, in the format from `references/pipeline-format.md`. Each order is concrete: what to build or fix, the files involved, and what "done" means for this round. Keep orders to a size the Coder can finish in one round.
+1. **Planner writes the order.** Overwrite `pipeline.md` with the order for this round, in the format from `references/pipeline-format.md`. Each order is concrete: what to build or fix, the files involved, and what "done" means for this round. Size it per Round size below: big enough to matter, small enough for the Coder to finish in one round.
 2. **Coder builds.** It carries out the order exactly, runs the project's tests, commits its work locally, and overwrites `pipeline.md` with what it did. It gives no opinions and no recommendations.
 3. **Tester attacks.** It reads `pipeline.md`, the diff and the spec's acceptance criteria. It tests, stresses and security-checks the work, then overwrites `pipeline.md` with its findings and its Challenge.
 4. **Reviewer judges.** It reads the Tester's report, the diff, the code and the spec. It agrees or disagrees with each finding, gives its design critique and ideas, and suggests how the Coder should change the code and how the Tester should test next. Then it overwrites `pipeline.md`.
@@ -98,6 +102,17 @@ Each round, send the agent one message with `SendMessage`, addressed to its reco
    - Append a short summary of the round to `planner-log.md`.
    - If a decision changes the plan, add an amendment to `CLAUDE.md` (see Amendments).
    - Then either write the next order (back to step 1) or end the cycle.
+
+### Round size
+
+A full loop (Coder, Tester, Reviewer, Planner) costs about the same whether the change is 20 lines or 500. Make each round count.
+
+- **Minimum:** each order delivers at least about 10% of the work left in the current cycle, measured in the plan's own units (tasks, slices or spec criteria). Write the estimate in `planner-log.md`, for example "round 7: text + labels, about 15% of cycle".
+- **Fundamentals first.** Pick the work everything else depends on (data model, core rules, security boundaries) before polish or edge features.
+- **Batch the fixes.** Findings from the Tester and Reviewer join the next order as extra items. They never get a round of their own, unless one is critical (data loss, security hole, broken build).
+- **Polish waits.** Renames, file splits, compaction and "nice to have" ideas go on a list in `planner-log.md`. Do them in one cleanup order at the end of the cycle, or drop them.
+- **Smaller on purpose only where mistakes are costly.** Money, migrations, auth and permissions may take smaller rounds. Say why in `planner-log.md`.
+- **Maximum:** the Coder must still finish in one round. If it cannot, split by feature (vertical slice), not by layer.
 
 ### Blocked rounds
 
@@ -110,7 +125,7 @@ The loop has no turn limit. Stop and ask the user when any of these happens:
 - The same finding stays unresolved across 3 loops.
 - 2 rounds in a row end `BLOCKED`.
 - You or the Reviewer think the spec's goal itself is wrong. Never change the goal alone.
-- The next step needs an action covered by rule 8.
+- The next step needs an action covered by rule 9.
 
 Security findings do not stop the loop. Order the Coder to fix them like any other finding.
 
@@ -142,7 +157,7 @@ When you judge the cycle complete:
    - the evidence for each spec requirement,
    - open low-priority findings,
    - every amendment, which the user can accept (fold into `spec.md`), edit, or discard,
-   - an offer to push to the repository (rule 8).
+   - an offer to push to the repository (rule 9).
 3. Wait. The user reviews the result, and you revise the plan and `spec.md` together.
 4. When the user says to continue, compare the new `spec.md` against the starting state in `planner-log.md`, plus the accepted amendments. Order the Coder to implement only the difference. Start a new cycle.
 
@@ -150,7 +165,7 @@ When you judge the cycle complete:
 
 - An agent finishes its round and goes idle. A new message resumes it with its context intact.
 - Each agent updates its handoff file at the end of every round.
-- If an agent dies or loses its context, spawn a replacement with the same brief, skills and model. Tell it to read `.crew/handoff/<role>.md` first. Record the new ID in `planner-log.md`.
+- If an agent dies or loses its context, spawn a replacement with the same agent type (`CODER`, `TESTER` or `REVIEWER`), brief, skills and model. Tell it to read `.crew/handoff/<role>.md` first. Record the new ID in `planner-log.md`.
 - Shut agents down (`TaskStop`) only when the user says so.
 
 ## Changing skills mid-project

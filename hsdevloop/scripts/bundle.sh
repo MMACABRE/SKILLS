@@ -2,7 +2,8 @@
 # Keeps copies of every skill hsdevloop names in ../bundle, so the skill can be
 # carried to another machine and install what that machine is missing.
 #
-#   bash scripts/bundle.sh install   copy missing skills into ~/.agents/skills and link them
+#   bash scripts/bundle.sh install   copy missing skills into ~/.agents/skills and link them,
+#                                    and install the crew agent types into ~/.claude/agents
 #   bash scripts/bundle.sh refresh   overwrite ../bundle with this machine's installed copies
 #
 # Built-in skills (security-review, claude-api) ship with Claude Code and are not bundled.
@@ -64,6 +65,15 @@ install() {
     [ -f "$AGENTS/$s/SKILL.md" ] || copy_clean "$BUNDLE/$s" "$AGENTS/$s"
     [ -e "$CLAUDE_SKILLS/$s" ] || link_skill "$s"
     added+=("$s")
+  done
+
+  # Crew agent types (CODER, TESTER, REVIEWER) the Planner spawns by name.
+  mkdir -p "$HOME/.claude/agents"
+  for a in "$HERE"/agents/*.md; do
+    local dest="$HOME/.claude/agents/$(basename "$a")"
+    cmp -s "$a" "$dest" && continue
+    cp "$a" "$dest"
+    added+=("agent:$(basename "$a" .md)")
   done
 
   if ! mp_installed; then
