@@ -8,7 +8,8 @@ Each agent gets **fixed skills** (always) plus **picked skills** (chosen by the 
 2. **Bundles count by their contents.** `hs24skills` loads 24 skills, and all 24 belong to the Coder. Never give the Tester or Reviewer a bundle loader (`hs24skills`, `hsluck`, `hsuiux`, `hsecurity`), because their contents overlap the Coder's.
 3. **Only loadable skills.** Pick only skills listed as available to the Skill tool. A skill whose frontmatter has `disable-model-invocation: true` cannot be loaded by an agent, so never pick one.
 4. **Strix check.** The Strix skills need the `strix` CLI, Docker and an LLM key. Before giving any Strix skill to the Tester, run `strix --version` (or `python -m strix --version`) and `docker info`. If either fails, pick non-Strix skills instead and note why in `planner-log.md`. This choice happens before spawning, so it does not trigger the skill-load stop. Once a skill is on an agent's list, a load failure stops everything.
-5. **Counts.** The Coder has about 30 skills. The Tester and Reviewer have about 10 to 12 each. These are recommendations, not caps. Add more when the project needs it.
+5. **Counts.** The Coder has about 15 skills, picked per task by the Planner (see below).
+5a. **`ponytail` is always on the Coder.** Every Coder spawn and every re-pick includes `ponytail`, loaded first. It counts toward the ~15. Never drop it, and never give it to the Tester or Reviewer. The Tester and Reviewer have about 10 to 12 each. These are recommendations, not caps. Add more when the project needs it.
 6. **Each picked skill gets a reason.** Write one line per picked skill in `planner-log.md`, for example "`ce-test-browser`: project has a web UI".
 7. **Bundled copies.** Every skill named in this file has a copy in `../bundle/`, except the built-ins `security-review` and `claude-api`, which ship with Claude Code. When you add a skill to these lists, add it to `SKILLS` (or `MP_SKILLS`) in `../scripts/bundle.sh` and run `bash scripts/bundle.sh refresh`. If startup installed the mattpocock fallback, write `mattpocock-<name>` wherever this file says `mattpocock-skills:<name>`.
 8. **Report-only inside the crew.** Many skills have steps that ask the user a question, spawn their own subagents, commit, push, write files outside the agent's area, or send code to an outside model. Inside the crew, agents skip those steps. The Coder's local commits are the only exception. The briefs repeat this rule.
@@ -19,14 +20,15 @@ Fixed: `spec-driven-development`, `planning-and-task-breakdown`, `constraint-dri
 
 The Planner may load any other skill when a decision needs it, including skills its subagents hold.
 
-## Coder: about 30 skills
+## Coder: about 15 skills, picked by the Planner per task
 
-**Fixed (25):**
+The Coder never loads the `hs24skills` bundle. The Planner picks **about 15 skills** from the pools below, based on the work the next rounds need (stack, phase, kind of task), and the Coder loads each one by name. Write the list with a one-line reason per skill in `planner-log.md`. Re-pick at every respawn (see rule 12 in `SKILL.md`), so the list follows the phase: for example leave out `frontend-ui-engineering` during backend work and add it when the UI starts.
 
-- `hs24skills`: loads the 24 lifecycle skills (`interview-me`, `idea-refine`, `spec-driven-development`, `constraint-driven-development`, `planning-and-task-breakdown`, `incremental-implementation`, `frontend-ui-engineering`, `api-and-interface-design`, `context-engineering`, `source-driven-development`, `doubt-driven-development`, `test-driven-development`, `browser-testing-with-devtools`, `debugging-and-error-recovery`, `code-review-and-quality`, `code-simplification`, `security-and-hardening`, `performance-optimization`, `git-workflow-and-versioning`, `ci-cd-and-automation`, `deprecation-and-migration`, `documentation-and-adrs`, `observability-and-instrumentation`, `shipping-and-launch`).
-- `ponytail`.
+**Always (1):** `ponytail`.
 
-**Picked (about 5)**, building skills that match the stack:
+**Pool: the 24 lifecycle skills** (pick only what the task needs): `interview-me`, `idea-refine`, `spec-driven-development`, `constraint-driven-development`, `planning-and-task-breakdown`, `incremental-implementation`, `frontend-ui-engineering`, `api-and-interface-design`, `context-engineering`, `source-driven-development`, `doubt-driven-development`, `test-driven-development`, `browser-testing-with-devtools`, `debugging-and-error-recovery`, `code-review-and-quality`, `code-simplification`, `security-and-hardening`, `performance-optimization`, `git-workflow-and-versioning`, `ci-cd-and-automation`, `deprecation-and-migration`, `documentation-and-adrs`, `observability-and-instrumentation`, `shipping-and-launch`. Planning-type skills (`interview-me`, `idea-refine`, `spec-driven-development`, `planning-and-task-breakdown`, `context-engineering`) rarely help a Coder that follows orders; prefer building, testing and debugging skills.
+
+**Pool: stack skills**, building skills that match the stack:
 
 | Project has | Candidates |
 |---|---|

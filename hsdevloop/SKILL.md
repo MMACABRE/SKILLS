@@ -54,7 +54,9 @@ Read these references when the step that needs them comes up:
 7. **Subagents run on Haiku 5.5 or Sonnet 5.5, never Opus.** The user picks a model for each of the three at the start.
 8. **Subagents are named CODER, TESTER and REVIEWER.** Spawn each with its own agent type of that name, never as `general-purpose`.
 9. **Ask the user before anything irreversible or outward-facing**: deleting data, `git push`, creating a remote repo, deploying, spending money, sending anything to an outside service. The spec does not grant this permission.
-10. **Every round moves the project forward by a real amount.** Each order must deliver at least about 10% of the current cycle's remaining work (see Round size). A round that only fixes findings from the last round is not allowed: fold those fixes into the next order that also builds something new.
+10. **Every round moves the project forward by a real amount.** Each order must deliver at least about 10% of the **whole plan** (all phases, not just the current cycle), measured in the plan's own units (see Round size). Size every order so one round covers that much; if the Coder cannot finish it, split by vertical slice but keep each slice near 10%. A round that only fixes findings from the last round is not allowed: fold those fixes into the next order that also builds something new.
+11. **Report progress after every round, always.** Each time any agent (Coder, Tester or Reviewer) finishes its round, tell the user in one short line a rough estimate of how far the work is: `progress: cycle ~X% · whole plan ~Y% · <what just finished>`. Base it on the plan's own units (tasks, slices, spec criteria done versus total), not on feel. Write the same line in `planner-log.md`. Never skip it, even when the round was blocked (then say so and keep the old numbers).
+12. **Fresh agents every 6 rounds.** A long-lived agent grows its context and every round costs more tokens. After an agent has done 6 rounds, stop it (`TaskStop`) once its round is finished and its handoff file is written, and spawn a replacement with the same agent type, brief and model. Re-pick the Coder's skills for the coming work at that point; `ponytail` is always on the Coder's list. The new agent reads its `.crew/handoff/<role>.md` first. Count rounds per agent in `planner-log.md`. Never stop an agent mid-round unless the user says so.
 
 ## Startup
 
@@ -90,7 +92,7 @@ Do these in order. Each step that asks the user waits for the answer.
 
 ## The loop
 
-Each round, send the agent one message with `SendMessage`, addressed to its recorded ID or name: "Your turn, round N. Read `.crew/pipeline.md`." Then wait for its completion notice.
+Each round, send the agent one message with `SendMessage`, addressed to its recorded ID or name: "Your turn, round N. Read `.crew/pipeline.md`." Then wait for its completion notice. After every completion notice, give the user the progress line from rule 11 before doing anything else.
 
 1. **Planner writes the order.** Overwrite `pipeline.md` with the order for this round, in the format from `references/pipeline-format.md`. Each order is concrete: what to build or fix, the files involved, and what "done" means for this round. Size it per Round size below: big enough to matter, small enough for the Coder to finish in one round.
 2. **Coder builds.** It carries out the order exactly, runs the project's tests, commits its work locally, and overwrites `pipeline.md` with what it did. It gives no opinions and no recommendations.
@@ -107,7 +109,7 @@ Each round, send the agent one message with `SendMessage`, addressed to its reco
 
 A full loop (Coder, Tester, Reviewer, Planner) costs about the same whether the change is 20 lines or 500. Make each round count.
 
-- **Minimum:** each order delivers at least about 10% of the work left in the current cycle, measured in the plan's own units (tasks, slices or spec criteria). Write the estimate in `planner-log.md`, for example "round 7: text + labels, about 15% of cycle".
+- **Minimum:** each order delivers at least about 10% of the whole plan, measured in the plan's own units (tasks, slices, spec criteria or session estimates). Write the estimate in `planner-log.md`, for example "round 7: models + races, about 10% of whole plan". Tell each agent in its message that its round covers that share, so it plans for the size.
 - **Fundamentals first.** Pick the work everything else depends on (data model, core rules, security boundaries) before polish or edge features.
 - **Batch the fixes.** Findings from the Tester and Reviewer join the next order as extra items. They never get a round of their own, unless one is critical (data loss, security hole, broken build).
 - **Polish waits.** Renames, file splits, compaction and "nice to have" ideas go on a list in `planner-log.md`. Do them in one cleanup order at the end of the cycle, or drop them.
@@ -166,7 +168,7 @@ When you judge the cycle complete:
 - An agent finishes its round and goes idle. A new message resumes it with its context intact.
 - Each agent updates its handoff file at the end of every round.
 - If an agent dies or loses its context, spawn a replacement with the same agent type (`CODER`, `TESTER` or `REVIEWER`), brief, skills and model. Tell it to read `.crew/handoff/<role>.md` first. Record the new ID in `planner-log.md`.
-- Shut agents down (`TaskStop`) only when the user says so.
+- Shut agents down (`TaskStop`) only when the user says so, or for the 6-round refresh (rule 12).
 
 ## Changing skills mid-project
 

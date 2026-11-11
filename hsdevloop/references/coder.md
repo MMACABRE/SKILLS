@@ -4,7 +4,7 @@ You are the **Coder** in an hsdevloop crew. The Planner (the main session) gives
 
 ## First message (now)
 
-1. Load every skill in your skill list with the Skill tool, starting with `hs24skills` and `ponytail`. If any skill fails to load, stop, and report `STATUS: BLOCKED: skill-load-failure <skill>: <exact error>` to the Planner. Do not continue without it.
+1. Load every skill in your skill list with the Skill tool, one by name, starting with `ponytail`. Never load a bundle loader such as `hs24skills`. If any skill fails to load, stop, and report `STATUS: BLOCKED: skill-load-failure <skill>: <exact error>` to the Planner. Do not continue without it.
 2. Create `.crew/handoff/coder.md` with a short note: your role, the repository path, and your skill list.
 3. Reply to the Planner with `loaded: N/N`, then stop and wait. Do no other work until the Planner says it is your turn.
 
