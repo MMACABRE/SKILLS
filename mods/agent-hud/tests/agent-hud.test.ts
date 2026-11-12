@@ -110,7 +110,8 @@ test('repaints the pane every 30 seconds', async ($, on) => {
 
   await $.session.start({ cwd: '/tmp', surface: null, isInteractive: false })
 
-  expect(periods).toEqual([30000])
+  // 30 s repaint, 5 min skills-repo check
+  expect(periods).toEqual([30000, 300000])
 })
 
 const SKILLS = [
@@ -217,4 +218,82 @@ test('favourites saved in an earlier session come back at the top', async ($, on
   const ui = await mountHud($)
 
   expect(await skillOrder(ui)).toEqual(['zeta-tool', 'alpha-skill', 'debugging'])
+})
+
+const CLEAN = 'CHANGED\nADDED\nREMOVED\nAHEAD 0\nBEHIND 0\nDIRTY 0\n'
+
+// Answers $.process.run like a Windows box with Git Bash; `script` answers the sync script itself.
+function stubRepo(on: any, script: (mode: string) => { exitCode?: number; stdout: string }, calls: string[][] = []) {
+  on('process.run', (_$: unknown, e: { argv: string[] }) => {
+    calls.push([...e.argv])
+    const ok = (stdout: string, exitCode = 0) => ({
+      value: { exitCode, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false }
+    })
+    if (e.argv[0] === 'git' && e.argv[1] === '--exec-path') return ok('C:/Program Files/Git/mingw64/libexec/git-core\n')
+    if (e.argv[1] === '-c') return ok('ok\n')
+    if (e.argv[1] === '-s') {
+      const r = script(e.argv[3] ?? "")
+      return ok(r.stdout, r.exitCode ?? 0)
+    }
+    return ok('', 1)
+  })
+}
+
+test('skills repo row says in sync when the folder matches the repo', async ($, on) => {
+  stubHud(on)
+  const calls: string[][] = []
+  stubRepo(on, () => ({ stdout: CLEAN }), calls)
+  const ui = await mountHud($)
+
+  await ui.press({ key: 'repo-check' })
+
+  const text = JSON.stringify(await ui.find({}))
+  expect(text).toContain('in sync')
+  expect(await ui.find({ key: 'repo-sync' })).toBeUndefined()
+  // Git Bash is found from git's own install, never the WSL bash on PATH
+  expect(calls.some((c) => c[0] === 'C:/Program Files/Git/bin/bash.exe' && c[1] === '-s' && c[3] === 'check')).toBe(true)
+})
+
+test('skills repo row lists what differs and offers a sync button', async ($, on) => {
+  stubHud(on)
+  stubRepo(on, () => ({ stdout: 'CHANGED caveman-compress\nADDED hscode\nREMOVED\nAHEAD 0\nBEHIND 0\nDIRTY 0\n' }))
+  const ui = await mountHud($)
+
+  await ui.press({ key: 'repo-check' })
+
+  const text = JSON.stringify(await ui.find({}))
+  expect(text).toContain('1 changed')
+  expect(text).toContain('1 new')
+  expect(text).toContain('caveman-compress')
+  expect(await ui.find({ key: 'repo-sync' })).toBeDefined()
+})
+
+test('the sync button pushes the folder and the row turns in sync', async ($, on) => {
+  stubHud(on)
+  const modes: string[] = []
+  stubRepo(on, (mode) => {
+    modes.push(mode)
+    return mode === 'sync'
+      ? { stdout: 'SYNCED abc1234 1\n' + CLEAN }
+      : { stdout: 'CHANGED caveman-compress\nADDED\nREMOVED\nAHEAD 0\nBEHIND 0\nDIRTY 0\n' }
+  })
+  on('ui.toast', () => ({ value: undefined }))
+  const ui = await mountHud($)
+
+  await ui.press({ key: 'repo-check' })
+  await ui.press({ key: 'repo-sync' })
+
+  expect(modes).toEqual(['check', 'sync'])
+  expect(JSON.stringify(await ui.find({}))).toContain('in sync')
+})
+
+test('a failing sync shows the error and the skill finder still draws', async ($, on) => {
+  stubHud(on)
+  stubRepo(on, () => ({ stdout: 'ERROR not a git repo: /x/SKILLS\n' }))
+  const ui = await mountHud($)
+
+  await ui.press({ key: 'repo-check' })
+
+  expect(JSON.stringify(await ui.find({}))).toContain('not a git repo')
+  expect(await skillOrder(ui)).toEqual(['alpha-skill', 'debugging', 'zeta-tool'])
 })

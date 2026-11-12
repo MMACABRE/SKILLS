@@ -36,7 +36,7 @@ Hooks registered:
 
 | Event | What it does |
 |---|---|
-| `session.start` | Opens the HUD pane (`$.ui.open`), starts a 30s repaint timer (`$.clock.every`) |
+| `session.start` | Opens the HUD pane (`$.ui.open`), starts a 30s repaint timer and a 5 min skills-repo check (`$.clock.every`), kicks off the first check in the background |
 | `agent.spawn` | After a subagent spawns, records its model in `agentModels` (a `Map<agentId, model>`) so the pane can show the right glyph later. Wrapped in try/catch so bookkeeping can never fail the actual spawn. |
 | `turn.start` / `turn.complete` | Tracks `mainState` ('running'/'idle') for the main session's own row. |
 | `ui.render` (component: `Pane`) | The actual render function. Only acts when `e.requestId === PANE_ID`; otherwise defers to `next(e)`. Pulls `$.agent.list()`, `$.session.usage()`, `$.session.model()` in parallel, builds rows, returns a `Box`/`Text` tree. |
@@ -101,6 +101,37 @@ rendered tree's text content.
 
 No build step, no `package.json`, no bundler — the plugin loader runs `register.js`
 as-is. Edits take effect on the next session/mod reload, not live mid-session.
+
+## Skills repo row
+
+Between the usage bars and the skill finder. Compares `~/.agents/skills` with the SKILLS
+clone (`~/Documents/GitHub/SKILLS`) and shows `● in sync` (green), or what differs
+(`2 changed, 1 new, 1 unpushed`, yellow) with a dim line of names (`~changed +new -removed`).
+`sync ↑` appears only when out of sync; `↻` rechecks.
+
+- **When it checks:** in the background at `session.start` (the pane does not wait on it),
+  every 5 minutes (`REPO_CHECK_MS`), and on `↻`. The 30s repaint only redraws the saved result.
+- **The work is a bash script**, `SYNC_SCRIPT`, sent on stdin to `bash -s -- check|sync` via
+  `$.process.run` (no shell, so no files to ship). It prints tagged lines (`CHANGED`, `ADDED`,
+  `REMOVED`, `AHEAD`, `BEHIND`, `DIRTY`, `OFFLINE`, `SYNCED`, `ERROR`) that `parseSyncOutput`
+  reads into the `agent-hud.repoSync` state value. `SKILLS_LOCAL` / `SKILLS_REPO` env vars
+  override the two paths.
+- **A skill folder** is a top-level dir holding `SKILL.md`, so `mods/` and dot-dirs never count.
+  The compare ignores `__pycache__`, `*.pyc`, `.git`, `node_modules`, `.DS_Store` and CRLF.
+- **Sync** = hsdevloop `bundle.sh refresh` (its rule before any SKILLS sync), then mirror
+  changed, new and deleted skill folders into the clone, commit **only those paths**
+  (`chore: sync skills from <hostname>`), and push to the branch the clone tracks. It refuses
+  when GitHub is unreachable, or when the clone is behind GitHub and has uncommitted edits;
+  behind but clean, it fast-forwards first. Your other work in the clone (e.g. `mods/`) is
+  never staged.
+- **Git Bash, not WSL:** on Windows `bash` on PATH is WSL's `System32\bash.exe`. `findBash`
+  derives Git Bash from `git --exec-path` (`…/mingw64/libexec/git-core` → `…/bin/bash.exe`),
+  then tries `C:/Program Files/Git/bin/bash.exe`, `/bin/bash`, `bash`.
+- **Editing the script:** it is a normal template literal, so `${` is written `\${`, and it
+  has no backslashes or backticks (find uses `'('`, not `\(`). Keep it that way, or the module
+  string stops matching what bash needs. Test it standalone first:
+  `"/c/Program Files/Git/bin/bash.exe" -s -- check < script.sh`.
+- Fails soft like the rest: any failure lands in the row as a red `● <error>`.
 
 ## Skill finder
 

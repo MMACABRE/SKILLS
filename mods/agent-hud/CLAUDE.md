@@ -72,7 +72,20 @@ works in this folder.
 - Bundle-loader skills (`/hs24skills`, `/hsuiux`) can't load `review-animations`; the user
   has to run that one themselves.
 
+- **WSL bash:** `$.process.run(['bash', …])` on this Windows box runs WSL, not Git Bash. Use
+  `findBash`.
+- **`$.process.run` stubs** take `{ value: { exitCode, stdout, stderr, isStdoutTruncated,
+  isStderrTruncated } }`; the event input is `{ argv, init }`.
+- **Embedded bash in a template literal:** no backslashes or backticks in it, `${` as `\${`.
+  A first version pushed to `origin HEAD` (the local branch name); it must push to the
+  tracked branch (`@{u}`), and it now errors if still ahead afterwards.
+
 ## Changelog
+
+- **0.4.0 (2026-11-13):** skills-repo row between the usage bars and the skill finder:
+  compares `~/.agents/skills` with the SKILLS clone, shows in sync / what differs, `sync ↑`
+  mirrors the folder into the repo, commits only skill folders and pushes; `↻` rechecks.
+  Checked at start and every 5 min.
 
 - **0.3.0 (2026-10-27):** skill finder below the usage bars: search box (Enter pastes the
   top match), click to insert `/name ` at the prompt cursor, ☆/★ favourites pinned to the top
