@@ -5,7 +5,7 @@ description: >
   skills in one call: built-in security review, security hardening, the Strix
   pentest skills, Trail of Bits audit skills, and the defensive SecOpsAgentKit
   scanner skills (Semgrep, Trivy, Grype, Checkov, Gitleaks, ZAP and Nuclei for
-  localhost only). Skills from plugins that are not installed yet are skipped.
+  localhost only), and Cloudflare's security-audit skill. Skills from plugins that are not installed yet are skipped.
   Use for /hsecurity or "load security skills".
 disable-model-invocation: false
 ---
@@ -92,6 +92,14 @@ Left out on purpose: `pentest-metasploit`, `crack-hashcat`, `privesc-linpeas`,
 `webapp-nikto`, `dast-ffuf`, `sca-blackduck`, `vuln-defectdojo`. Load one of the
 offensive ones by name only when the user asks for it for a target they own.
 
+### E. Cloudflare (`cloudflare/security-audit-skill`)
+
+34. security-audit
+
+A source-first audit with independently verified findings. It runs as guidance by
+default. It runs the full six-phase workflow and writes report files only when the
+user asks for a full audit or a report.
+
 ## Rules for the whole session
 
 These stay active once hsecurity is loaded, for the main session and every subagent.
@@ -124,5 +132,5 @@ These stay active once hsecurity is loaded, for the main session and every subag
 ## Editing the bundle
 
 To add or remove a skill, edit the list above and keep the numbering in step with
-the `N/<total>` count (currently 33). Update the "left out" notes when a decision
+the `N/<total>` count (currently 34). Update the "left out" notes when a decision
 changes.

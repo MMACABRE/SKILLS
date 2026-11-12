@@ -2,7 +2,7 @@
 name: hsluck
 description: >
   Skill bundle loader. Loads the user's standard set of skills (caveman, ponytail,
-  grilling, ce-* review/debug, commits, PRs, etc.) into context in one call.
+  grilling, domain modeling, find-skills, commits, PRs) into context in one call.
   Complements hs24skills (no overlap).
   Use for /hsluck or "load my skills".
 disable-model-invocation: false
@@ -18,7 +18,7 @@ When this skill is invoked, load every skill below into context **right now**, b
    - Independent calls: send them in parallel (several `Skill` calls in one message) to save time.
    - If a skill is not found or fails to load, note its name and keep going. Do not stop the batch.
 2. After all calls finish, print one short report:
-   - `loaded: N/16`
+   - `loaded: N/9`
    - `missing: <names>` (only if any failed)
 3. From then on, follow every loaded skill's instructions for the rest of the session, whenever a task falls in that skill's scope. `caveman` stays active for chat output; code, docs and commits stay in normal prose.
    - `unslop` and `caveman` work together. In chat, apply both: unslop's word and style rules (plain words, no filler, no chatbot phrases, no em dashes) plus caveman's shortening. Where they clash (unslop rule 33, over-compression), caveman wins in chat.
@@ -126,22 +126,9 @@ Communication and meta:
 - mattpocock-skills:grilling
 - mattpocock-skills:domain-modeling
   (these two = `/mattpocock-skills:grill-with-docs`, which is user-only, `disable-model-invocation: true`, and just loads them)
-- research
 
-Review and simplification:
-- ce-code-review
-- ce-simplify-code
+Review:
 - caveman-review
-
-Building:
-- safe-refactor
-
-Browser testing:
-- ce-test-browser
-
-Debugging and performance:
-- ce-debug
-- ce-optimize
 
 Git:
 - caveman-commit
@@ -149,4 +136,4 @@ Git:
 
 ## Editing the bundle
 
-To add or remove a skill, edit the list above (and the `N/16` count). Skills already in `hs24skills` stay out of this list; load both bundles to get them all.
+To add or remove a skill, edit the list above (and the `N/9` count). Skills already in `hs24skills` stay out of this list; load both bundles to get them all.
