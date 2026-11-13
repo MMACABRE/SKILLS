@@ -25,12 +25,13 @@ works in this folder.
 
 ## How to make a change
 
-1. Read `note.md` and the relevant part of `hooks/register.js`.
+1. Read `note.md` and the relevant module: `hooks/register.js` (wiring), `hooks/view.js`
+   (drawing), `hooks/repo-sync.js` (skills-repo row).
 2. Look up every API you'll touch in the vendored types (grep `export type <Name> =`,
    `'event.name'`, or the `$` method).
 3. **Test first:** add a failing test to `tests/agent-hud.test.ts` and watch it fail for
    the right reason.
-4. Implement in `hooks/register.js` (plain JS, no build step, one file).
+4. Implement in the module that owns it (plain JS, no build step).
 5. Check all of it:
    ```
    claude plugin test .
@@ -46,6 +47,21 @@ works in this folder.
 7. Update `note.md` (architecture) and the changelog below.
 
 ## Gotchas already hit (don't rediscover them)
+
+- **The drawing rule:** one row = one line, never wider than `e.props.bodyColumns`, never more
+  rows than `e.props.scroll.bodyRows`. `e.viewport.rows` is the whole screen, not the pane.
+  Breaking this is what garbled the terminal before 0.5.0. New rows go through `hudRows` so
+  `fit` clips them; text from outside goes through `plain()`.
+- **Atoms stay in the file that uses them:** `update($, atom, ...)` with an atom imported from
+  another file fails to load ("takes a source the scan can read"). Export a function instead,
+  as `readRepoSync` does.
+- **No literal invisible characters in source:** the regexes in `view.js` name zero-width and
+  wide characters by escape sequence (backslash-u and four hex digits). Some tools decode
+  those into the characters themselves on write; a literal line separator then ends the regex
+  ("Unterminated regular expression"). After editing those lines, check they are still ASCII.
+- **Interactive only:** `session.start` does nothing unless `e.isInteractive`, so tests that
+  need the start-up pass `{ surface: 'terminal', isInteractive: true }` and stub
+  `command.register` with `{ value: { command: 'hud' } }`.
 
 - **Stub signature in tests:** handlers are `($, e, next)`, so the input is the 2nd argument:
   `on('clock.every', (_$, e) => …e.ms)`.
@@ -81,6 +97,13 @@ works in this folder.
   tracked branch (`@{u}`), and it now errors if still ahead afterwards.
 
 ## Changelog
+
+- **0.5.0 (2026-11-13):** rework. Fixes the pane garbling the terminal: rows are clipped to
+  the pane's width and the tree to its height, outside text is stripped of control characters
+  and escape codes. Split into `register.js` / `view.js` / `repo-sync.js`; module variables
+  moved to `$.state`; every data source fails soft. `/hud` reopens the pane. Headless runs
+  (`-p`, SDK) no longer open a pane or fetch from GitHub. Inline height asked for: 30 rows
+  down to 20.
 
 - **0.4.0 (2026-11-13):** skills-repo row between the usage bars and the skill finder:
   compares `~/.agents/skills` with the SKILLS clone, shows in sync / what differs, `sync ↑`

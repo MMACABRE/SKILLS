@@ -20,9 +20,10 @@ test('renders agent list and usage bars in the hud pane', async ($, on) => {
   on('session.model', () => ({ value: 'claude-sonnet-5-5' }))
   on('ui.open', () => ({ value: { isPlaced: true } }))
   on('clock.every', () => ({ value: undefined }))
+  on('command.register', () => ({ value: { command: 'hud' } }))
   on('session.start', () => ({ cwd: '/tmp' }))
 
-  await $.session.start({ cwd: '/tmp', surface: null, isInteractive: false })
+  await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
 
   const ui = await $.ui.mount({
     plugin: 'agent-hud',
@@ -106,9 +107,10 @@ test('repaints the pane every 30 seconds', async ($, on) => {
     periods.push(e.ms)
     return { value: undefined }
   })
+  on('command.register', () => ({ value: { command: 'hud' } }))
   on('session.start', () => ({ cwd: '/tmp' }))
 
-  await $.session.start({ cwd: '/tmp', surface: null, isInteractive: false })
+  await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
 
   // 30 s repaint, 5 min skills-repo check
   expect(periods).toEqual([30000, 300000])
@@ -212,9 +214,10 @@ test('favourites saved in an earlier session come back at the top', async ($, on
   stubHud(on, { stored: ['zeta-tool'] })
   on('ui.open', () => ({ value: { isPlaced: true } }))
   on('clock.every', () => ({ value: undefined }))
+  on('command.register', () => ({ value: { command: 'hud' } }))
   on('session.start', () => ({ cwd: '/tmp' }))
 
-  await $.session.start({ cwd: '/tmp', surface: null, isInteractive: false })
+  await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
   const ui = await mountHud($)
 
   expect(await skillOrder(ui)).toEqual(['zeta-tool', 'alpha-skill', 'debugging'])
@@ -295,5 +298,121 @@ test('a failing sync shows the error and the skill finder still draws', async ($
   await ui.press({ key: 'repo-check' })
 
   expect(JSON.stringify(await ui.find({}))).toContain('not a git repo')
+  expect(await skillOrder(ui)).toEqual(['alpha-skill', 'debugging', 'zeta-tool'])
+})
+
+// --- the pane must never draw past its own box (what garbled the terminal before 0.5.0) ---
+
+// Cells one drawn element takes on a row: its text, plus the gaps a row Box puts between children.
+const shownCells = (el: any): number => {
+  if (typeof el === 'string') return el.length
+  if (el.type === 'Input') return 0
+  const kids: any[] = el.children ?? []
+  if (kids.length === 0) return String(el.props?.label ?? '').length
+  const gaps = el.type === 'Box' ? (el.props?.gap ?? 0) * (kids.length - 1) : 0
+  return kids.reduce((sum, k) => sum + shownCells(k), gaps)
+}
+
+const mountSized = ($: any, bodyColumns: number, bodyRows: number, placement: 'dock' | 'inline' = 'dock') =>
+  $.ui.mount({
+    plugin: 'agent-hud',
+    surface: 'terminal',
+    component: 'Pane',
+    props: { title: 'Agent HUD', isFocused: false, bodyColumns, placement, scroll: { offset: 0, bodyRows }, view: {} },
+    requestId: 'hud'
+  })
+
+function stubCrowded(on: any) {
+  on('agent.list', () => ({
+    value: Array.from({ length: 9 }, (_, i) => ({
+      id: 'agent-' + i,
+      description: 'a long task description',
+      type: 'general-purpose-with-a-very-long-type-name',
+      status: 'running'
+    }))
+  }))
+  on('session.usage', () => ({
+    value: {
+      startedAt: 0,
+      context: { window: 1, percent: 0 },
+      rateLimits: [
+        { kind: 'five_hour', percentUsed: 100, resetsAt: '2026-01-01T00:00:00Z' },
+        { kind: 'seven_day', percentUsed: 7, resetsAt: '2026-01-01T00:00:00Z' }
+      ]
+    }
+  }))
+  on('session.model', () => ({ value: 'claude-some-very-long-model-name-5-5-20261113' }))
+  on('command.list', () => ({
+    value: Array.from({ length: 40 }, (_, i) => ({
+      name: 'a-skill-with-quite-a-long-name-' + i,
+      description: 'A description that goes on for much longer than any pane is wide, on and on',
+      source: 'user'
+    }))
+  }))
+}
+
+for (const [columns, rows] of [[24, 10], [40, 30], [72, 18]] as [number, number][]) {
+  test(`every row fits a ${columns}x${rows} pane, and the rows fit its height`, async ($, on) => {
+    stubCrowded(on)
+    const ui = await mountSized($, columns, rows)
+
+    const lines: any[] = ((await ui.drawn()) as any).children
+    for (const line of lines) expect(shownCells(line)).toBeLessThanOrEqual(columns)
+    expect(lines.length).toBeLessThanOrEqual(rows)
+  })
+}
+
+test('text from outside is drawn without control characters or escape codes', async ($, on) => {
+  on('session.usage', () => ({ value: { startedAt: 0, context: { window: 1, percent: 0 }, rateLimits: [] } }))
+  on('session.model', () => ({ value: 'claude-sonnet-5-5' }))
+  on('agent.list', () => ({ value: [{ id: 'a1', description: 'x', type: 'Explore', name: 'bad\u001b[2Jname\r\nnext', status: 'running' }] }))
+  on('command.list', () => ({ value: [{ name: 'tabby', description: 'line one\nline two\u0007\u001b[31m red', source: 'user' }] }))
+  const ui = await mountHud($)
+
+  const control = new RegExp('[' + String.fromCharCode(0) + '-' + String.fromCharCode(31) + ']')
+  const texts = (await ui.findAll({})).map((el: any) => el.text as string)
+  for (const text of texts) expect(control.test(text)).toBe(false)
+  const all = texts.join('|')
+  expect(all).not.toContain('[2J')
+  expect(all).not.toContain('[31m')
+  expect(all).toContain('badname next')
+  expect(all).toContain('line one line two red')
+})
+
+test('a headless session opens no pane, starts no timers and runs no git', async ($, on) => {
+  const calls: string[] = []
+  for (const name of ['ui.open', 'clock.every', 'process.run', 'store.get', 'command.register']) {
+    on(name as any, () => {
+      calls.push(name)
+      return { value: undefined } as any
+    })
+  }
+  on('session.start', () => ({ cwd: '/tmp' }))
+
+  await $.session.start({ cwd: '/tmp', surface: null, isInteractive: false })
+
+  expect(calls).toEqual([])
+})
+
+test('/hud opens the pane again after it was closed', async ($, on) => {
+  const opened: any[] = []
+  on('ui.open', (_$: unknown, e: unknown) => {
+    opened.push(e)
+    return { value: { isPlaced: true } }
+  })
+
+  const ran = await $.command.run({ command: 'hud', args: '' } as any)
+
+  expect(opened).toHaveLength(1)
+  expect(opened[0].id).toBe('hud')
+  expect(JSON.stringify(ran)).toContain('Agent HUD opened')
+})
+
+test('data sources that fail leave their sections empty and the rest drawn', async ($, on) => {
+  // agent.list, session.usage and session.model are not stubbed, so each throws
+  on('command.list', () => ({ value: SKILLS as any }))
+  const ui = await mountHud($)
+
+  expect(JSON.stringify(await ui.drawn())).toContain('no rate-limit data yet')
   expect(await skillOrder(ui)).toEqual(['alpha-skill', 'debugging', 'zeta-tool'])
 })

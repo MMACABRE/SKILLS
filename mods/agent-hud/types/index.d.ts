@@ -7,6 +7,10 @@ declare module 'claude-code' {
       skillQuery: string
       /** Starred skill names, in the order they were starred. */
       favourites: string[]
+      /** Whether the main session is in a turn. */
+      mainStatus: 'idle' | 'running'
+      /** The model each subagent was spawned with, by agent id (newest 64). */
+      agentModels: Record<string, string>
       /** Last result of comparing ~/.agents/skills with the SKILLS repo clone. */
       repoSync: {
         status: 'idle' | 'checking' | 'syncing' | 'ok' | 'out' | 'error'

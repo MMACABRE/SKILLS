@@ -9,54 +9,88 @@ Installed from this directory as `agent-hud@hossein-mods` (local marketplace), s
 
 ## Files
 
-- `.claude-plugin/plugin.json` — plugin metadata (name, version, description, author).
-- `.claude-plugin/marketplace.json` — registers this directory as a local marketplace
-  (`hossein-mods`) with one plugin (`agent-hud`, source `./`). This is what lets
-  `claude plugin install`/`list` find it from a plain folder instead of a real registry.
-- `.claude-plugin/types/` — vendored `.d.ts` files for the mod APIs (`claude-code`,
-  `claude-code-mcp`, `claude-code-tools`). Not shipped logic — just editor/tsc types.
-  **This is the source of truth for what hook payloads and `$.*` calls actually look like.**
-  When a field seems wrong at runtime, check here before guessing.
-- `hooks/hooks.json` — tells the plugin loader which JS files register hooks
-  (`modules: ["./register.js"]`).
-- `hooks/register.js` — all the actual logic. One file, no build step.
-- `tests/agent-hud.test.ts` — one test using `claude-code/testing`'s mock harness.
-- `tsconfig.json` — just extends the vendored types' tsconfig for editor support.
+- `.claude-plugin/plugin.json`: plugin metadata (name, version, description, author).
+- `.claude-plugin/marketplace.json`: registers this directory as a local marketplace
+  (`hossein-mods`) with one plugin (`agent-hud`, source `./`).
+- `.claude-plugin/types/`: vendored `.d.ts` files for the mod APIs. Not shipped logic.
+  **This is the source of truth for what hook payloads and `$.*` calls look like.**
+- `hooks/hooks.json`: names the one hooks module, `./register.js`.
+- `hooks/register.js`: the wiring. Events write state, the render hook gathers data and
+  hands it to the view. No drawing and no git in here.
+- `hooks/view.js`: the drawing. Pure: plain data in, rows out, rows to elements.
+- `hooks/repo-sync.js`: the skills-repo check and sync, and the state value holding its result.
+- `types/index.d.ts`: the `$.state` contract.
+- `tests/agent-hud.test.ts`: tests through the mock harness; they mount the pane and read
+  what it drew, so they hold for any internal layout of the three modules.
 
-## How register.js works
+`register.js` imports the other two with relative imports (`./view.js`). The engine, the
+test kit and `claude plugin validate` all follow them; no build step.
 
-Exports one function: `register(on)`. `on(eventName, handler)` subscribes a hook.
-Every handler gets `($, e, next)`:
-- `$` — the API surface (`$.ui`, `$.agent`, `$.session`, `$.clock`, ...)
-- `e` — the event payload
-- `next(e)` — calls the next hook in the chain / the engine's default behavior;
-  you must call and usually return this unless you're intentionally short-circuiting.
+## The one drawing rule (why the terminal used to break)
 
-Hooks registered:
+**A row is exactly one line, never wider than the pane, and there are never more rows than
+the pane has room for.** Until 0.5.0 the pane broke the terminal's display three ways:
+
+1. It sized the skill list from `e.viewport.rows`, which is the whole screen, not the pane.
+   The tree came out taller than its box (29 rows into an 18-row pane in the test).
+2. Rows were wider than `bodyColumns` (fixed 28-cell separators, unclipped agent rows), so
+   they wrapped and every row below shifted.
+3. Text from outside (skill descriptions, agent names, git errors) was drawn raw, control
+   characters and escape codes included.
+
+The fix lives in `view.js`:
+
+- The pane's box is `e.props.bodyColumns` by `e.props.scroll.bodyRows`. Nothing else.
+- Every row goes through `fit(row, width)`, which cuts its segments to the width. Each `Text`
+  also carries `wrap: 'truncate-end'`, so a width the code misjudges truncates, never wraps.
+- The skill list gets the rows the sections above leave (`size.rows - top.length`); the last
+  row says how many were left out. Agents are capped the same way.
+- Under 16 rows the pane is compact: no separators, no reset lines, no repo names line.
+- Outside text goes through `plain()`: escape codes out, control characters and line breaks
+  to one space, zero-width characters out. `cells()` counts CJK and emoji as two cells.
+- Rows have no `gap`; a segment carries its own leading space. That way a row's text is its
+  width, which is what the tests measure.
+
+Tests: `every row fits a WxH pane` (three sizes) and `text from outside is drawn without
+control characters`. Break `fit`, `plain` or the height budget and they fail.
+
+## How it runs
+
+`register(on)` subscribes hooks; every handler gets `($, e, next)`.
 
 | Event | What it does |
 |---|---|
-| `session.start` | Opens the HUD pane (`$.ui.open`), starts a 30s repaint timer and a 5 min skills-repo check (`$.clock.every`), kicks off the first check in the background |
-| `agent.spawn` | After a subagent spawns, records its model in `agentModels` (a `Map<agentId, model>`) so the pane can show the right glyph later. Wrapped in try/catch so bookkeeping can never fail the actual spawn. |
-| `turn.start` / `turn.complete` | Tracks `mainState` ('running'/'idle') for the main session's own row. |
-| `ui.render` (component: `Pane`) | The actual render function. Only acts when `e.requestId === PANE_ID`; otherwise defers to `next(e)`. Pulls `$.agent.list()`, `$.session.usage()`, `$.session.model()` in parallel, builds rows, returns a `Box`/`Text` tree. |
+| `session.start` | Interactive sessions only: loads favourites, registers `/hud`, opens the pane, starts the 30s repaint and 5 min repo check, kicks off the first check. A `-p` run or the SDK does none of it (no pane to draw, and no reason to fetch from GitHub). |
+| `command.run` (`hud`) | Opens the pane again after it was closed. |
+| `agent.spawn` | After the spawn, records the agent's model in the `agentModels` state value (newest 64). |
+| `turn.start` / `turn.complete` | Sets the `mainStatus` state value. |
+| `ui.render` (`Pane`, `requestId: 'hud'`) | Reads everything in parallel, builds a plain `hud` object, returns `drawPane(elements, hudRows(hud, size, actions))`. |
 
-State is module-level (`agentModels`, `mainState`) — it lives in memory only and
-resets if the mod reloads. That's fine here: it's repopulated as agents spawn again.
+**State is in `$.state`, not module variables.** A write redraws the pane by itself (no
+`$.ui.invalidate` needed) and survives a hot reload. The 30s timer still invalidates, because
+agent statuses and usage have no change event. Two module variables remain in
+`repo-sync.js`, both deliberate: the cached Git Bash path and the in-flight guard.
 
-### Rendering model
+**An atom is declared in the file that uses it.** The engine scans each file for the state
+it reads and writes, and refuses `update($, importedAtom, ...)`. So `repo-sync.js` owns the
+`repoSync` atom and exports `readRepoSync($)`; `register.js` owns the other four.
 
-Uses a tiny React-like API: `$.ui.resolve(e)` gives you `{ Box, Text }` factory
-functions (not JSX — plain function calls with a props object, e.g.
-`Text({ color: 'green', children: ['●'] })`). `Box` takes `flexDirection`, `gap`,
-`children`. Everything is composed from `agentRow(...)` / `usageRow(...)` helper
-functions that build one row each.
+**Everything fails soft.** `soft(promise, fallback)` wraps each data source in the render
+hook and each step of `startHud`: one failing source leaves its section empty, never the pane.
+
+### Rows and segments
+
+`hudRows(hud, size, actions)` returns rows. A row is `{ key, segments }` or `{ key, input }`.
+A segment is `{ text, color?, dimColor?, bold? }`; with `press` (its Button key) and `onPress`
+it is a Button, and `detail` is a dim tail inside the same Button. `drawPane` maps rows to
+`Box`/`Text`/`Button`/`Input` from `$.ui.resolve(e)`. A style prop is passed only when set.
 
 ### Model glyphs
 
-`SHAPE_RULES` maps a regex over the model string to a glyph: `◆` opus, `●` sonnet,
-`▲` haiku, `★` fable, `○` unknown/missing. `shortModel()` just strips the `claude-`
-prefix for display.
+`MODEL_GLYPHS` maps a regex over the model string to a glyph: diamond for opus, filled
+circle for sonnet, triangle for haiku, star for fable, hollow circle for unknown or missing.
+The `claude-` prefix is dropped for display, and the model name is the first thing an agent
+row drops when the pane is narrow.
 
 ### Status colors
 
@@ -65,8 +99,8 @@ prefix for display.
 
 ### Usage bars
 
-`bar(percent, width)` draws a `█`/`░` block bar. `barColor(percent)` goes
-green < 70%, yellow 70–89%, red ≥ 90%.
+`usageRows` draws a block bar, 14 cells or fewer when the pane is narrow.
+`usageColor(percent)` goes green under 70%, yellow from 70%, red from 90%.
 
 Under each bar, `resetLabel(resetsAt)` adds a dim line like `resets Tue 27 Oct, 22:10`
 (local time, formatted by hand so it reads the same everywhere). `resetsAt` is an
@@ -111,7 +145,7 @@ clone (`~/Documents/GitHub/SKILLS`) and shows `● in sync` (green), or what dif
 
 - **When it checks:** in the background at `session.start` (the pane does not wait on it),
   every 5 minutes (`REPO_CHECK_MS`), and on `↻`. The 30s repaint only redraws the saved result.
-- **The work is a bash script**, `SYNC_SCRIPT`, sent on stdin to `bash -s -- check|sync` via
+- **The work is a bash script**, `SYNC_SCRIPT` in `hooks/repo-sync.js`, sent on stdin to `bash -s -- check|sync` via
   `$.process.run` (no shell, so no files to ship). It prints tagged lines (`CHANGED`, `ADDED`,
   `REMOVED`, `AHEAD`, `BEHIND`, `DIRTY`, `OFFLINE`, `SYNCED`, `ERROR`) that `parseSyncOutput`
   reads into the `agent-hud.repoSync` state value. `SKILLS_LOCAL` / `SKILLS_REPO` env vars
@@ -154,9 +188,10 @@ favourites first in starring order, the rest alphabetically.
 
 ## Possible future work (not done, just noted)
 
-- The `agent.spawn` hook's `next(e)` call isn't wrapped in try/catch — `claude
-  plugin validate` flags this as "gating hook without .catch". Harmless today
-  since nothing throws there, but worth wrapping if this hook grows.
-- No handling for `agent.spawn` failures/`agent.complete` — the HUD currently only
-  removes a finished agent from the list because `$.agent.list()` stops returning
-  it, not because this mod explicitly reacts to completion.
+- `claude plugin validate` notes "gating hook without .catch: agent.spawn". The hook's own
+  bookkeeping is already soft; only `next(e)` can throw, and that should reach the caller.
+- The glyphs (stars, model shapes, bar blocks, the recheck arrow) are "ambiguous width": one
+  cell in most terminals, two with some CJK fonts or settings. If rows still look shifted by
+  a cell, swap them for ASCII in `view.js` (`MODEL_GLYPHS`, `usageRows`, `skillRow`,
+  `repoRows`).
+- The HUD only drops a finished agent because `$.agent.list()` stops returning it.
